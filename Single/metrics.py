@@ -72,7 +72,7 @@ def _ssim(img1, img2):
     return ssim_map.mean()
 
 
-def calculate_ssim(img1, img2, test_y_channel=False):
+def calculate_ssim(img1, img2, test_y_channel=True):
     """Calculate SSIM (structural similarity).
 
     Ref:
