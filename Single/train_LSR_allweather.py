@@ -33,7 +33,6 @@ import logging
 import numpy as np
 import PIL.Image as Image
 from torchvision.transforms import ToPILImage
-from pytorch_msssim import ms_ssim
 from typing import Tuple, Union
 from torch.utils.tensorboard import SummaryWriter
 from util import DWT, IWT, setup_logger
@@ -41,6 +40,7 @@ from LIH import LIH as hide_model
 from LSR import Model as restore_model
 from tqdm import tqdm
 import lpips
+import metrics as my_metrics
 
 
 def gauss_noise(shape):
@@ -54,27 +54,42 @@ def torch2img(x: torch.Tensor) -> Image.Image:
     return ToPILImage()(x.cpu().clamp_(0, 1).squeeze())
 
 
-def compute_metrics(
-        a: Union[np.array, Image.Image],
-        b: Union[np.array, Image.Image],
-        max_val: float = 255.0,
-) -> Tuple[float, float]:
-    if isinstance(a, Image.Image):
-        a = np.asarray(a)
-    if isinstance(b, Image.Image):
-        b = np.asarray(b)
+def _to_bgr_uint8(x: Union[torch.Tensor, np.ndarray, Image.Image]) -> np.ndarray:
+    """Normalise an image of any common type to BGR uint8 HWC (cv2 convention).
 
-    a = torch.from_numpy(a.copy()).float().unsqueeze(0)
-    if a.size(3) == 3:
-        a = a.permute(0, 3, 1, 2)
-    b = torch.from_numpy(b.copy()).float().unsqueeze(0)
-    if b.size(3) == 3:
-        b = b.permute(0, 3, 1, 2)
+    `metrics.py` was adapted from SwinIR and uses `bgr2ycbcr` whose coefficients
+    expect BGR input. Our pipeline produces RGB tensors / PIL images, so we
+    flip channels here.
+    """
+    if isinstance(x, Image.Image):
+        rgb = np.asarray(x)
+    elif isinstance(x, torch.Tensor):
+        t = x.detach().cpu().clamp(0, 1).squeeze()
+        if t.dim() == 3:  # CHW
+            t = t.permute(1, 2, 0)
+        rgb = (t.numpy() * 255.0).round().astype(np.uint8)
+    elif isinstance(x, np.ndarray):
+        rgb = x
+        if rgb.dtype != np.uint8:
+            rgb = (np.clip(rgb, 0, 1) * 255.0).round().astype(np.uint8)
+    else:
+        raise TypeError(f"Unsupported image type: {type(x)}")
+    return np.ascontiguousarray(rgb[:, :, ::-1])  # RGB → BGR
 
-    mse = torch.mean((a - b) ** 2).item()
-    p = 20 * np.log10(max_val) - 10 * np.log10(mse) if mse > 0 else float("inf")
-    m = ms_ssim(a, b, data_range=max_val).item()
-    return p, m
+
+def compute_metrics(a, b, y_channel: bool = True) -> Tuple[float, float]:
+    """PSNR + SSIM via metrics.py (SwinIR-style).
+
+    Args:
+        a, b: tensor / ndarray / PIL Image in RGB.
+        y_channel: True → compute on Y of YCbCr (standard for weather
+            restoration baselines); False → compute on RGB.
+    """
+    a_bgr = _to_bgr_uint8(a)
+    b_bgr = _to_bgr_uint8(b)
+    p = my_metrics.calculate_psnr(a_bgr, b_bgr, test_y_channel=y_channel)
+    s = my_metrics.calculate_ssim(a_bgr, b_bgr, test_y_channel=y_channel)
+    return p, s
 
 
 class AverageMeter:
@@ -251,11 +266,12 @@ def test_epoch(args, epoch, test_dataloader, hide_model, denoise_model,
             steg_img_pil = torch2img(steg_clean)
             steg_img_ori_pil = torch2img(steg_ori)
 
-            p1, m1 = compute_metrics(secret_img_rec_pil, secret_img_pil)
+            # All metrics on Y channel of YCbCr.
+            p1, m1 = compute_metrics(secret_img_rec_pil, secret_img_pil, y_channel=True)
             psnrs.update(p1); ssims.update(m1)
-            p2, m2 = compute_metrics(steg_img_pil, cover_img_pil)
+            p2, m2 = compute_metrics(steg_img_pil, cover_img_pil, y_channel=True)
             psnrc.update(p2); ssimc.update(m2)
-            p3, m3 = compute_metrics(steg_img_ori_pil, cover_img_pil)
+            p3, m3 = compute_metrics(steg_img_ori_pil, cover_img_pil, y_channel=True)
             psnrcori.update(p3); ssimcori.update(m3)
 
             if args.save_img:
