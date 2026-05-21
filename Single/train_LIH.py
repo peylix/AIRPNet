@@ -46,7 +46,7 @@ from torchvision.transforms import ToPILImage
 from pytorch_msssim import ms_ssim
 from typing import Tuple, Union
 from torch.utils.tensorboard import SummaryWriter
-from LIHv2 import LIH
+from LIH import LIH
 from util import DWT,IWT,setup_logger
 from tqdm import tqdm
 
