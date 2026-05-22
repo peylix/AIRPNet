@@ -564,6 +564,7 @@ def main(argv):
         num_workers=args.num_workers,
         shuffle=True,
         pin_memory=(device == "cuda"),
+        drop_last=True,
     )
 
     test_dataloader = DataLoader(
@@ -572,6 +573,7 @@ def main(argv):
         num_workers=args.num_workers,
         shuffle=False,
         pin_memory=(device == "cuda"),
+        drop_last=True,
     )
 
     # hide net
