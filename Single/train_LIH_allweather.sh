@@ -11,4 +11,5 @@ CUDA_VISIBLE_DEVICES=0 python train_LIH.py \
    -d_test /root/autodl-tmp/allweather/gt_val \
    --batch-size 16 --test-batch-size 2 -lr 1e-4 --save --cuda \
    --exp allweather_lih \
-   --num-steps 12 --guide-weight 1 --rec-weight 1
+   --num-steps 12 --guide-weight 1 --rec-weight 1 \
+   -e 200
