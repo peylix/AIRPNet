@@ -19,4 +19,3 @@ CUDA_VISIBLE_DEVICES=0 python train_LSR_allweather.py \
    --hide_checkpoint experiments/allweather_lih/checkpoints/_checkpoint_best_loss.pth.tar \
    --test \
    --checkpoint experiments/allweather_lsr/checkpoints/_checkpoint_best_loss.pth.tar \
-   -e 300
