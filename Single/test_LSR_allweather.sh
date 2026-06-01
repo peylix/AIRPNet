@@ -10,12 +10,12 @@ CUDA_VISIBLE_DEVICES=0 python train_LSR_allweather.py \
    --raindrop_test /root/autodl-tmp/raindrop_data/test_a \
    --snow_test     /root/autodl-tmp/Snow100K-testset/jdway/GameSSD/overlapping/test/Snow100K-L \
    --batch-size 16 --val_freq 50 -lr 1e-4 --save --cuda \
-   --exp allweather_lsr \
+   --exp allweather_lsr_eval \
    --nafwidth 32 --mid 2 --enc 2 2 4 --dec 2 2 2 \
    --klvl 3 --steps 4 --num_step 12 \
    --patch-size 224 224 --test-patch-size 256 256 \
    --cweight 1 --sweight 7 --pweight_c 0.005 \
-   --save_im --save_img_limit 50 \
+   --save_img --save_img_limit 50 \
    --hide_checkpoint experiments/allweather_lih/checkpoints/_checkpoint_best_loss.pth.tar \
    --test \
    --checkpoint experiments/allweather_lsr/checkpoints/_checkpoint_best_loss.pth.tar
