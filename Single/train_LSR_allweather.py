@@ -274,7 +274,7 @@ def test_epoch(args, epoch, test_dataloader, hide_model, denoise_model,
             p3, m3 = compute_metrics(steg_img_ori_pil, cover_img_pil, y_channel=True)
             psnrcori.update(p3); ssimcori.update(m3)
 
-            if args.save_img:
+            if args.save_img and (args.save_img_limit <= 0 or i < args.save_img_limit):
                 rec_dir = os.path.join(save_dir, "rec", task_name)
                 secret_dir = os.path.join(save_dir, "secret", task_name)
                 cover_dir = os.path.join(save_dir, "cover", task_name)
@@ -344,6 +344,8 @@ def parse_args(argv):
     parser.add_argument("--enc", default=[2, 2, 4], nargs="+", type=int)
     parser.add_argument("--dec", default=[2, 2, 2], nargs="+", type=int)
     parser.add_argument("--save_img", action="store_true", default=False)
+    parser.add_argument("--save_img_limit", type=int, default=0,
+                        help="Cap saved images per test set (0 = unlimited).")
     parser.add_argument("--test", action="store_true", default=False)
     parser.add_argument("--finetune", action="store_true", default=False)
     parser.add_argument("--sweight", type=float, default=2)

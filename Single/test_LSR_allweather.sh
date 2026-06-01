@@ -15,7 +15,7 @@ CUDA_VISIBLE_DEVICES=0 python train_LSR_allweather.py \
    --klvl 3 --steps 4 --num_step 12 \
    --patch-size 224 224 --test-patch-size 256 256 \
    --cweight 1 --sweight 7 --pweight_c 0.005 \
-   --save_img \
+   --save_im --save_img_limit 50 \
    --hide_checkpoint experiments/allweather_lih/checkpoints/_checkpoint_best_loss.pth.tar \
    --test \
    --checkpoint experiments/allweather_lsr/checkpoints/_checkpoint_best_loss.pth.tar
