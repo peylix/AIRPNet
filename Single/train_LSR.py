@@ -81,13 +81,18 @@ class AverageMeter:
         self.val = 0
         self.avg = 0
         self.sum = 0
+        self.sum_sq = 0
         self.count = 0
+        self.std = 0
 
     def update(self, val, n=1):
         self.val = val
         self.sum += val * n
+        self.sum_sq += (val ** 2) * n
         self.count += n
         self.avg = self.sum / self.count
+        var = self.sum_sq / self.count - self.avg ** 2
+        self.std = max(var, 0) ** 0.5
 
 
 class CustomDataParallel(nn.DataParallel):
@@ -331,15 +336,15 @@ def test_epoch(args,epoch, test_dataloader, hide_model, denoise_model,logger_val
 
     logger_val.info(
         f"Test epoch {epoch} - Degrate Type {degrate_type}: Average losses:"
-        f"\tPSNRC: {psnrc.avg:.6f} |"
-        f"\tSSIMC: {ssimc.avg:.6f} |"
-        f"\tLPIPSC: {lpipsc.avg:.6f} |"
-        f"\tPSNRS: {psnrs.avg:.6f} |"
-        f"\tSSIMS: {ssims.avg:.6f} |"
-        f"\tLPIPSS: {lpipss.avg:.6f} |"
-        f"\tPSNRCORI: {psnrcori.avg:.6f} |"
-        f"\tSSIMCORI: {ssimcori.avg:.6f} |"
-        f"\tLPIPSORI: {lpipscori.avg:.6f} |\n"
+        f"\tPSNRC: {psnrc.avg:.6f}±{psnrc.std:.6f} |"
+        f"\tSSIMC: {ssimc.avg:.6f}±{ssimc.std:.6f} |"
+        f"\tLPIPSC: {lpipsc.avg:.6f}±{lpipsc.std:.6f} |"
+        f"\tPSNRS: {psnrs.avg:.6f}±{psnrs.std:.6f} |"
+        f"\tSSIMS: {ssims.avg:.6f}±{ssims.std:.6f} |"
+        f"\tLPIPSS: {lpipss.avg:.6f}±{lpipss.std:.6f} |"
+        f"\tPSNRCORI: {psnrcori.avg:.6f}±{psnrcori.std:.6f} |"
+        f"\tSSIMCORI: {ssimcori.avg:.6f}±{ssimcori.std:.6f} |"
+        f"\tLPIPSORI: {lpipscori.avg:.6f}±{lpipscori.std:.6f} |\n"
     )
 
     return loss.avg

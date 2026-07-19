@@ -94,13 +94,18 @@ class AverageMeter:
         self.val = 0
         self.avg = 0
         self.sum = 0
+        self.sum_sq = 0
         self.count = 0
+        self.std = 0
 
     def update(self, val, n=1):
         self.val = val
         self.sum += val * n
+        self.sum_sq += (val ** 2) * n
         self.count += n
         self.avg = self.sum / self.count
+        var = self.sum_sq / self.count - self.avg ** 2
+        self.std = max(var, 0) ** 0.5
 
 
 class CustomDataParallel(nn.DataParallel):
@@ -622,30 +627,30 @@ def test_epoch(args,epoch, test_dataloader, model1, model2,model3, criterion,log
 
     logger_val.info(
         f"Test epoch {epoch}: Average losses:"
-        f"\tPSNRC_1_b: {psnrc_1_b.avg:.6f} |"
-        f"\tSSIMC_1_b: {ssimc_1_b.avg:.6f} |"
-        f"\tPSNRS_1_b: {psnrs_1_b.avg:.6f} |" 
-        f"\tSSIMS_1_b: {ssims_1_b.avg:.6f} |"
-        f"\tPSNRC_2_b: {psnrc_2_b.avg:.6f} |"
-        f"\tSSIMC_2_b: {ssimc_2_b.avg:.6f} |"
-        f"\tPSNRS_2_b: {psnrs_2_b.avg:.6f} |" 
-        f"\tSSIMS_2_b: {ssims_2_b.avg:.6f} |"
-        f"\tPSNRC_1_n: {psnrc_1_n.avg:.6f} |"
-        f"\tSSIMC_1_n: {ssimc_1_n.avg:.6f} |"
-        f"\tPSNRS_1_n: {psnrs_1_n.avg:.6f} |" 
-        f"\tSSIMS_1_n: {ssims_1_n.avg:.6f} |"
-        f"\tPSNRC_2_n: {psnrc_2_n.avg:.6f} |"
-        f"\tSSIMC_2_n: {ssimc_2_n.avg:.6f} |"
-        f"\tPSNRS_2_n: {psnrs_2_n.avg:.6f} |" 
-        f"\tSSIMS_2_n: {ssims_2_n.avg:.6f} |"
-        f"\tPSNRC_1_l: {psnrc_1_l.avg:.6f} |"
-        f"\tSSIMC_1_l: {ssimc_1_l.avg:.6f} |"
-        f"\tPSNRS_1_l: {psnrs_1_l.avg:.6f} |" 
-        f"\tSSIMS_1_l: {ssims_1_l.avg:.6f} |"
-        f"\tPSNRC_2_l: {psnrc_2_l.avg:.6f} |"
-        f"\tSSIMC_2_l: {ssimc_2_l.avg:.6f} |"
-        f"\tPSNRS_2_l: {psnrs_2_l.avg:.6f} |" 
-        f"\tSSIMS_2_l: {ssims_2_l.avg:.6f} |"
+        f"\tPSNRC_1_b: {psnrc_1_b.avg:.6f}±{psnrc_1_b.std:.6f} |"
+        f"\tSSIMC_1_b: {ssimc_1_b.avg:.6f}±{ssimc_1_b.std:.6f} |"
+        f"\tPSNRS_1_b: {psnrs_1_b.avg:.6f}±{psnrs_1_b.std:.6f} |" 
+        f"\tSSIMS_1_b: {ssims_1_b.avg:.6f}±{ssims_1_b.std:.6f} |"
+        f"\tPSNRC_2_b: {psnrc_2_b.avg:.6f}±{psnrc_2_b.std:.6f} |"
+        f"\tSSIMC_2_b: {ssimc_2_b.avg:.6f}±{ssimc_2_b.std:.6f} |"
+        f"\tPSNRS_2_b: {psnrs_2_b.avg:.6f}±{psnrs_2_b.std:.6f} |" 
+        f"\tSSIMS_2_b: {ssims_2_b.avg:.6f}±{ssims_2_b.std:.6f} |"
+        f"\tPSNRC_1_n: {psnrc_1_n.avg:.6f}±{psnrc_1_n.std:.6f} |"
+        f"\tSSIMC_1_n: {ssimc_1_n.avg:.6f}±{ssimc_1_n.std:.6f} |"
+        f"\tPSNRS_1_n: {psnrs_1_n.avg:.6f}±{psnrs_1_n.std:.6f} |" 
+        f"\tSSIMS_1_n: {ssims_1_n.avg:.6f}±{ssims_1_n.std:.6f} |"
+        f"\tPSNRC_2_n: {psnrc_2_n.avg:.6f}±{psnrc_2_n.std:.6f} |"
+        f"\tSSIMC_2_n: {ssimc_2_n.avg:.6f}±{ssimc_2_n.std:.6f} |"
+        f"\tPSNRS_2_n: {psnrs_2_n.avg:.6f}±{psnrs_2_n.std:.6f} |" 
+        f"\tSSIMS_2_n: {ssims_2_n.avg:.6f}±{ssims_2_n.std:.6f} |"
+        f"\tPSNRC_1_l: {psnrc_1_l.avg:.6f}±{psnrc_1_l.std:.6f} |"
+        f"\tSSIMC_1_l: {ssimc_1_l.avg:.6f}±{ssimc_1_l.std:.6f} |"
+        f"\tPSNRS_1_l: {psnrs_1_l.avg:.6f}±{psnrs_1_l.std:.6f} |" 
+        f"\tSSIMS_1_l: {ssims_1_l.avg:.6f}±{ssims_1_l.std:.6f} |"
+        f"\tPSNRC_2_l: {psnrc_2_l.avg:.6f}±{psnrc_2_l.std:.6f} |"
+        f"\tSSIMC_2_l: {ssimc_2_l.avg:.6f}±{ssimc_2_l.std:.6f} |"
+        f"\tPSNRS_2_l: {psnrs_2_l.avg:.6f}±{psnrs_2_l.std:.6f} |" 
+        f"\tSSIMS_2_l: {ssims_2_l.avg:.6f}±{ssims_2_l.std:.6f} |"
     )
 
     return loss.avg

@@ -95,13 +95,18 @@ class AverageMeter:
         self.val = 0
         self.avg = 0
         self.sum = 0
+        self.sum_sq = 0
         self.count = 0
+        self.std = 0
 
     def update(self, val, n=1):
         self.val = val
         self.sum += val * n
+        self.sum_sq += (val ** 2) * n
         self.count += n
         self.avg = self.sum / self.count
+        var = self.sum_sq / self.count - self.avg ** 2
+        self.std = max(var, 0) ** 0.5
 
 
 class CustomDataParallel(nn.DataParallel):
@@ -397,14 +402,14 @@ def test_epoch(args, epoch, test_dataloader, model1, model2, model3, criterion, 
 
     logger_val.info(
         f"Test epoch {epoch}: Average losses:"
-        f"\tPSNR Cover 1: {psnr_cover_1.avg:.6f} |"
-        f"\tSSIM Cover 1: {ssim_cover_1.avg:.6f} |"
-        f"\tPSNR Cover 2: {psnr_cover_2.avg:.6f} |"
-        f"\tSSIM Cover 2: {ssim_cover_2.avg:.6f} |"
-        f"\tPSNR Secret 1: {psnr_secret_1.avg:.6f} |"
-        f"\tSSIM Secret 1: {ssim_secret_1.avg:.6f} |"
-        f"\tPSNR Secret 2: {psnr_secret_2.avg:.6f} |"
-        f"\tSSIM Secret 2: {ssim_secret_2.avg:.6f} |"
+        f"\tPSNR Cover 1: {psnr_cover_1.avg:.6f}±{psnr_cover_1.std:.6f} |"
+        f"\tSSIM Cover 1: {ssim_cover_1.avg:.6f}±{ssim_cover_1.std:.6f} |"
+        f"\tPSNR Cover 2: {psnr_cover_2.avg:.6f}±{psnr_cover_2.std:.6f} |"
+        f"\tSSIM Cover 2: {ssim_cover_2.avg:.6f}±{ssim_cover_2.std:.6f} |"
+        f"\tPSNR Secret 1: {psnr_secret_1.avg:.6f}±{psnr_secret_1.std:.6f} |"
+        f"\tSSIM Secret 1: {ssim_secret_1.avg:.6f}±{ssim_secret_1.std:.6f} |"
+        f"\tPSNR Secret 2: {psnr_secret_2.avg:.6f}±{psnr_secret_2.std:.6f} |"
+        f"\tSSIM Secret 2: {ssim_secret_2.avg:.6f}±{ssim_secret_2.std:.6f} |"
     )
 
     return loss.avg

@@ -101,13 +101,18 @@ class AverageMeter:
         self.val = 0
         self.avg = 0
         self.sum = 0
+        self.sum_sq = 0
         self.count = 0
+        self.std = 0
 
     def update(self, val, n=1):
         self.val = val
         self.sum += val * n
+        self.sum_sq += (val ** 2) * n
         self.count += n
         self.avg = self.sum / self.count
+        var = self.sum_sq / self.count - self.avg ** 2
+        self.std = max(var, 0) ** 0.5
 
 
 class CustomDataParallel(nn.DataParallel):
@@ -411,22 +416,22 @@ def test_epoch(args, epoch, test_dataloader, model, logger_val,criterion):
 
     logger_val.info(
         f"Test epoch {epoch}: Average losses:"
-        f"\tPSNRC_N: {psnrc_n.avg:.6f} |"
-        f"\tSSIMC_N: {ssimc_n.avg:.6f} |"
-        f"\tPSNRS_N: {psnrs_n.avg:.6f} |"
-        f"\tSSIMS_N: {ssims_n.avg:.6f} |"
-        f"\tPSNRC_B: {psnrc_b.avg:.6f} |"
-        f"\tSSIMC_B: {ssimc_b.avg:.6f} |"
-        f"\tPSNRS_B: {psnrs_b.avg:.6f} |"
-        f"\tSSIMS_B: {ssims_b.avg:.6f} |"
-        f"\tPSNRC_L: {psnrc_l.avg:.6f} |"
-        f"\tSSIMC_L: {ssimc_l.avg:.6f} |"
-        f"\tPSNRS_L: {psnrs_l.avg:.6f} |"
-        f"\tSSIMS_L: {ssims_l.avg:.6f} |"
-        f"\tPSNRC_M: {psnrc_m.avg:.6f} |"
-        f"\tSSIMC_M: {ssimc_m.avg:.6f} |"
-        f"\tPSNRS_M: {psnrs_m.avg:.6f} |"
-        f"\tSSIMS_M: {ssims_m.avg:.6f} |"
+        f"\tPSNRC_N: {psnrc_n.avg:.6f}±{psnrc_n.std:.6f} |"
+        f"\tSSIMC_N: {ssimc_n.avg:.6f}±{ssimc_n.std:.6f} |"
+        f"\tPSNRS_N: {psnrs_n.avg:.6f}±{psnrs_n.std:.6f} |"
+        f"\tSSIMS_N: {ssims_n.avg:.6f}±{ssims_n.std:.6f} |"
+        f"\tPSNRC_B: {psnrc_b.avg:.6f}±{psnrc_b.std:.6f} |"
+        f"\tSSIMC_B: {ssimc_b.avg:.6f}±{ssimc_b.std:.6f} |"
+        f"\tPSNRS_B: {psnrs_b.avg:.6f}±{psnrs_b.std:.6f} |"
+        f"\tSSIMS_B: {ssims_b.avg:.6f}±{ssims_b.std:.6f} |"
+        f"\tPSNRC_L: {psnrc_l.avg:.6f}±{psnrc_l.std:.6f} |"
+        f"\tSSIMC_L: {ssimc_l.avg:.6f}±{ssimc_l.std:.6f} |"
+        f"\tPSNRS_L: {psnrs_l.avg:.6f}±{psnrs_l.std:.6f} |"
+        f"\tSSIMS_L: {ssims_l.avg:.6f}±{ssims_l.std:.6f} |"
+        f"\tPSNRC_M: {psnrc_m.avg:.6f}±{psnrc_m.std:.6f} |"
+        f"\tSSIMC_M: {ssimc_m.avg:.6f}±{ssimc_m.std:.6f} |"
+        f"\tPSNRS_M: {psnrs_m.avg:.6f}±{psnrs_m.std:.6f} |"
+        f"\tSSIMS_M: {ssims_m.avg:.6f}±{ssims_m.std:.6f} |"
     )
 
     return loss.avg

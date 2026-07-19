@@ -88,13 +88,18 @@ class AverageMeter:
         self.val = 0
         self.avg = 0
         self.sum = 0
+        self.sum_sq = 0
         self.count = 0
+        self.std = 0
 
     def update(self, val, n=1):
         self.val = val
         self.sum += val * n
+        self.sum_sq += (val ** 2) * n
         self.count += n
         self.avg = self.sum / self.count
+        var = self.sum_sq / self.count - self.avg ** 2
+        self.std = max(var, 0) ** 0.5
 
 
 class CustomDataParallel(nn.DataParallel):
@@ -464,21 +469,21 @@ def test_epoch(args,epoch, test_dataloader, hide_model1, hide_model2,hide_model3
 
     logger_val.info(
         f"Test epoch {epoch}: Average losses:"
-        f"\tPSNR_C: {psnrc.avg:.6f} |"
-        f"\tSSIM_C: {ssimc.avg:.6f} |"
-        f"\tLPIPS_C: {lpipsc.avg:.6f} |" 
-        f"\tPSNR_S1: {psnrs_1.avg:.6f} |"
-        f"\tSSIM_S1: {ssims_1.avg:.6f} |"
-        f"\tLPIPS_S1: {lpipss_1.avg:.6f} |"
-        f"\tPSNR_S2: {psnrs_2.avg:.6f} |"
-        f"\tSSIM_S2: {ssims_2.avg:.6f} |"
-        f"\tLPIPS_S2: {lpipss_2.avg:.6f} |" 
-        f"\tPSNR_CORI1: {psnrc_ori_1.avg:.6f} |"
-        f"\tSSIM_CORI1: {ssimc_ori_1.avg:.6f} |"
-        f"\tLPIPS_CORI1: {lpipsc_ori_1.avg:.6f} |"
-        f"\tPSNR_CORI2: {psnrc_ori_2.avg:.6f} |"
-        f"\tSSIM_CORI2: {ssimc_ori_2.avg:.6f} |"
-        f"\tLPIPS_CORI2: {lpipsc_ori_2.avg:.6f} |"
+        f"\tPSNR_C: {psnrc.avg:.6f}±{psnrc.std:.6f} |"
+        f"\tSSIM_C: {ssimc.avg:.6f}±{ssimc.std:.6f} |"
+        f"\tLPIPS_C: {lpipsc.avg:.6f}±{lpipsc.std:.6f} |" 
+        f"\tPSNR_S1: {psnrs_1.avg:.6f}±{psnrs_1.std:.6f} |"
+        f"\tSSIM_S1: {ssims_1.avg:.6f}±{ssims_1.std:.6f} |"
+        f"\tLPIPS_S1: {lpipss_1.avg:.6f}±{lpipss_1.std:.6f} |"
+        f"\tPSNR_S2: {psnrs_2.avg:.6f}±{psnrs_2.std:.6f} |"
+        f"\tSSIM_S2: {ssims_2.avg:.6f}±{ssims_2.std:.6f} |"
+        f"\tLPIPS_S2: {lpipss_2.avg:.6f}±{lpipss_2.std:.6f} |" 
+        f"\tPSNR_CORI1: {psnrc_ori_1.avg:.6f}±{psnrc_ori_1.std:.6f} |"
+        f"\tSSIM_CORI1: {ssimc_ori_1.avg:.6f}±{ssimc_ori_1.std:.6f} |"
+        f"\tLPIPS_CORI1: {lpipsc_ori_1.avg:.6f}±{lpipsc_ori_1.std:.6f} |"
+        f"\tPSNR_CORI2: {psnrc_ori_2.avg:.6f}±{psnrc_ori_2.std:.6f} |"
+        f"\tSSIM_CORI2: {ssimc_ori_2.avg:.6f}±{ssimc_ori_2.std:.6f} |"
+        f"\tLPIPS_CORI2: {lpipsc_ori_2.avg:.6f}±{lpipsc_ori_2.std:.6f} |"
     )
     tb_logger.add_scalar('{}'.format('[val]: loss'), loss.avg, epoch + 1)
     return loss.avg
