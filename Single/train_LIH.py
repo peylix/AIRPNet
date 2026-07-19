@@ -588,6 +588,8 @@ def main(argv):
     if args.cuda and torch.cuda.device_count() > 1:
         net = CustomDataParallel(net)
     logger_train.info(args)
+    lih_params = sum(p.numel() for p in net.parameters())
+    logger_val.info(f"Params: LIH {lih_params / 1e6:.3f}M")
 
     optimizer = configure_optimizers(net, args)
     criterion = LIH_Loss()

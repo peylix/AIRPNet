@@ -847,6 +847,13 @@ def main(argv):
         net2 = CustomDataParallel(net2)
         net3 = CustomDataParallel(net3)
     logger_train.info(args)
+    lih_params = sum(p.numel() for m in (net1, net2) for p in m.parameters())
+    gm_params = sum(p.numel() for p in net3.parameters())
+    logger_val.info(
+        f"Params: LIH {lih_params / 1e6:.3f}M"
+        f" | GM {gm_params / 1e6:.3f}M"
+        f" | total {(lih_params + gm_params) / 1e6:.3f}M"
+    )
 
     optimizer1 = configure_optimizers(net1, args.learning_rate_1)
     optimizer2 = configure_optimizers(net2, args.learning_rate_2)

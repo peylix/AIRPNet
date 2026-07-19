@@ -226,6 +226,8 @@ def test_epoch(args,epoch, test_dataloader, hide_model, denoise_model,logger_val
     hide_model = hide_model.to(device)
     denoise_model = denoise_model.to(device)
     
+    infer_time = AverageMeter()
+    timing_started = False
     with torch.no_grad():
         for idx,d in tqdm(enumerate(test_dataloader)):
             d = d.to(device)
@@ -251,6 +253,10 @@ def test_epoch(args,epoch, test_dataloader, hide_model, denoise_model,logger_val
                 lr_secret_img = downsample(blur_secret_img,2)
                 input_secret_img = lr_secret_img
 
+            if device.type == "cuda":
+                torch.cuda.synchronize()
+            tic = time.perf_counter()
+
             input_cover = dwt(cover_img)
             input_secret = dwt(input_secret_img)
    
@@ -266,6 +272,14 @@ def test_epoch(args,epoch, test_dataloader, hide_model, denoise_model,logger_val
             output_z_guass = gauss_noise(output_z.shape)
             cover_rev, secret_rev= hide_model(output_clean, output_z_guass,rev=True)
             rec_img = iwt(secret_rev)
+
+            if device.type == "cuda":
+                torch.cuda.synchronize()
+            # first batch discarded: includes CUDA kernel warm-up
+            if timing_started:
+                infer_time.update((time.perf_counter() - tic) * 1000 / cover_img.shape[0])
+            else:
+                timing_started = True
             
             out_criterion = criterion(secret_img,cover_img,steg_clean,steg_ori,rec_img,args.sweight,args.cweight,args.pweight_c,args.finetune)
             loss.update(out_criterion["loss"])
@@ -344,7 +358,8 @@ def test_epoch(args,epoch, test_dataloader, hide_model, denoise_model,logger_val
         f"\tLPIPSS: {lpipss.avg:.6f}±{lpipss.std:.6f} |"
         f"\tPSNRCORI: {psnrcori.avg:.6f}±{psnrcori.std:.6f} |"
         f"\tSSIMCORI: {ssimcori.avg:.6f}±{ssimcori.std:.6f} |"
-        f"\tLPIPSORI: {lpipscori.avg:.6f}±{lpipscori.std:.6f} |\n"
+        f"\tLPIPSORI: {lpipscori.avg:.6f}±{lpipscori.std:.6f} |"
+        f"\tTIME: {infer_time.avg:.2f}±{infer_time.std:.2f} ms/img |\n"
     )
 
     return loss.avg
@@ -546,6 +561,13 @@ def main(argv):
     if args.cuda and torch.cuda.device_count() > 1:
         denoise_net = CustomDataParallel(denoise_net)
     logger_train.info(args)
+    hide_params = sum(p.numel() for p in hide_net.parameters())
+    denoise_params = sum(p.numel() for p in denoise_net.parameters())
+    logger_val.info(
+        f"Params: LIH {hide_params / 1e6:.3f}M"
+        f" | LSR {denoise_params / 1e6:.3f}M"
+        f" | total {(hide_params + denoise_params) / 1e6:.3f}M"
+    )
 
     #load hide net
     state_dicts = torch.load(args.hide_checkpoint, map_location=device) 
