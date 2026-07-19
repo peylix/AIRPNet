@@ -17,6 +17,7 @@ import numpy as np
 import PIL.Image as Image
 from torchvision.transforms import ToPILImage
 from pytorch_msssim import ms_ssim
+import metrics as my_metrics
 from typing import Tuple, Union
 from torch.utils.tensorboard import SummaryWriter
 from util import DWT,IWT,setup_logger
@@ -82,6 +83,26 @@ def compute_metrics(
     m = ms_ssim(a, b, data_range=max_val).item()
     return p, m
 
+
+def compute_mae(a: Image.Image, b: Image.Image) -> float:
+    """Y-channel MAE on [0, 1] scale (reference: metrics/measure.py)."""
+    a_bgr = np.asarray(a)[:, :, ::-1]
+    b_bgr = np.asarray(b)[:, :, ::-1]
+    return my_metrics.calculate_mae(a_bgr, b_bgr, test_y_channel=True)
+
+
+_dists_fn = None
+
+
+def get_dists_fn(device):
+    """DISTS via piq, created lazily so training without piq still works."""
+    global _dists_fn
+    if _dists_fn is None:
+        from piq import DISTS
+        _dists_fn = DISTS().to(device).eval()
+    return _dists_fn
+
+
 class AverageMeter:
     """Compute running average."""
 
@@ -127,7 +148,6 @@ def configure_optimizers(net, args):
         lr=args.learning_rate,
     )
     return optimizer
-
 
 
 def train_one_epoch(
@@ -266,6 +286,7 @@ def test_epoch(args,epoch, test_dataloader, hide_model1, hide_model2,hide_model3
     hide_model3.eval()
     denoise_model.eval()
     device = next(hide_model1.parameters()).device
+    dists_fn = get_dists_fn(device)
     psnrc = AverageMeter()
     ssimc = AverageMeter()
     lpipsc = AverageMeter()
@@ -281,6 +302,16 @@ def test_epoch(args,epoch, test_dataloader, hide_model1, hide_model2,hide_model3
     psnrc_ori_2 = AverageMeter()
     ssimc_ori_2 = AverageMeter()
     lpipsc_ori_2 = AverageMeter()
+    maec = AverageMeter()
+    maes_1 = AverageMeter()
+    maes_2 = AverageMeter()
+    maec_ori_1 = AverageMeter()
+    maec_ori_2 = AverageMeter()
+    distsc = AverageMeter()
+    distss_1 = AverageMeter()
+    distss_2 = AverageMeter()
+    distsc_ori_1 = AverageMeter()
+    distsc_ori_2 = AverageMeter()
     
     loss = AverageMeter()
     
@@ -378,16 +409,28 @@ def test_epoch(args,epoch, test_dataloader, hide_model1, hide_model2,hide_model3
                 args.pweight_c,args.finetune)
             loss.update(out_criterian['loss'])
        
-            lpips = lpips_fn.forward(cover,steg_2_clean)
+            # Model outputs are clamped to [0, 1] as when saved to PNG;
+            # normalize=True maps [0, 1] to the [-1, 1] LPIPS input range.
+            steg_2_clean_c = steg_2_clean.clamp(0, 1)
+            steg_1_c = steg_1.clamp(0, 1)
+            steg_2_c = steg_2.clamp(0, 1)
+            secret_rev_1_c = secret_rev_1.clamp(0, 1)
+            secret_rev_2_c = secret_rev_2.clamp(0, 1)
+            lpips = lpips_fn.forward(cover, steg_2_clean_c, normalize=True)
             lpipsc.update(lpips.mean().item())
-            lpips = lpips_fn.forward(cover,steg_1)
+            lpips = lpips_fn.forward(cover, steg_1_c, normalize=True)
             lpipsc_ori_1.update(lpips.mean().item())
-            lpips = lpips_fn.forward(cover,steg_2)
+            lpips = lpips_fn.forward(cover, steg_2_c, normalize=True)
             lpipsc_ori_2.update(lpips.mean().item())
-            lpips = lpips_fn.forward(secret_1,secret_rev_1)
+            lpips = lpips_fn.forward(secret_1, secret_rev_1_c, normalize=True)
             lpipss_1.update(lpips.mean().item())
-            lpips = lpips_fn.forward(secret_2,secret_rev_2)
+            lpips = lpips_fn.forward(secret_2, secret_rev_2_c, normalize=True)
             lpipss_2.update(lpips.mean().item())
+            distsc.update(dists_fn(steg_2_clean_c, cover).item())
+            distsc_ori_1.update(dists_fn(steg_1_c, cover).item())
+            distsc_ori_2.update(dists_fn(steg_2_c, cover).item())
+            distss_1.update(dists_fn(secret_rev_1_c, secret_1).item())
+            distss_2.update(dists_fn(secret_rev_2_c, secret_2).item())
             
             
             #compute psnr and save image
@@ -409,18 +452,23 @@ def test_epoch(args,epoch, test_dataloader, hide_model1, hide_model2,hide_model3
             p1, m1 = compute_metrics(hq_secret_img_1, secret_img1)
             psnrs_1.update(p1)
             ssims_1.update(m1)
+            maes_1.update(compute_mae(hq_secret_img_1, secret_img1))
             p1, m1 = compute_metrics(hq_secret_img_2, secret_img2)
             psnrs_2.update(p1)
             ssims_2.update(m1)
+            maes_2.update(compute_mae(hq_secret_img_2, secret_img2))
             p2, m2 = compute_metrics(steg_img, cover_img)
             psnrc.update(p2)
             ssimc.update(m2)
+            maec.update(compute_mae(steg_img, cover_img))
             p3, m3 = compute_metrics(steg_img_ori_1, cover_img)
             psnrc_ori_1.update(p3)
             ssimc_ori_1.update(m3)
+            maec_ori_1.update(compute_mae(steg_img_ori_1, cover_img))
             p3, m3 = compute_metrics(steg_img_ori_2, cover_img)
             psnrc_ori_2.update(p3)
             ssimc_ori_2.update(m3)
+            maec_ori_2.update(compute_mae(steg_img_ori_2, cover_img))
             
             if args.save_img:
                 secret_dir1 = os.path.join(save_dir,'secret1')
@@ -480,19 +528,29 @@ def test_epoch(args,epoch, test_dataloader, hide_model1, hide_model2,hide_model3
         f"Test epoch {epoch}: Average losses:"
         f"\tPSNR_C: {psnrc.avg:.6f}±{psnrc.std:.6f} |"
         f"\tSSIM_C: {ssimc.avg:.6f}±{ssimc.std:.6f} |"
+        f"\tMAE_C: {maec.avg:.6f}±{maec.std:.6f} |"
         f"\tLPIPS_C: {lpipsc.avg:.6f}±{lpipsc.std:.6f} |" 
+        f"\tDISTS_C: {distsc.avg:.6f}±{distsc.std:.6f} |"
         f"\tPSNR_S1: {psnrs_1.avg:.6f}±{psnrs_1.std:.6f} |"
         f"\tSSIM_S1: {ssims_1.avg:.6f}±{ssims_1.std:.6f} |"
+        f"\tMAE_S1: {maes_1.avg:.6f}±{maes_1.std:.6f} |"
         f"\tLPIPS_S1: {lpipss_1.avg:.6f}±{lpipss_1.std:.6f} |"
+        f"\tDISTS_S1: {distss_1.avg:.6f}±{distss_1.std:.6f} |"
         f"\tPSNR_S2: {psnrs_2.avg:.6f}±{psnrs_2.std:.6f} |"
         f"\tSSIM_S2: {ssims_2.avg:.6f}±{ssims_2.std:.6f} |"
+        f"\tMAE_S2: {maes_2.avg:.6f}±{maes_2.std:.6f} |"
         f"\tLPIPS_S2: {lpipss_2.avg:.6f}±{lpipss_2.std:.6f} |" 
+        f"\tDISTS_S2: {distss_2.avg:.6f}±{distss_2.std:.6f} |"
         f"\tPSNR_CORI1: {psnrc_ori_1.avg:.6f}±{psnrc_ori_1.std:.6f} |"
         f"\tSSIM_CORI1: {ssimc_ori_1.avg:.6f}±{ssimc_ori_1.std:.6f} |"
+        f"\tMAE_CORI1: {maec_ori_1.avg:.6f}±{maec_ori_1.std:.6f} |"
         f"\tLPIPS_CORI1: {lpipsc_ori_1.avg:.6f}±{lpipsc_ori_1.std:.6f} |"
+        f"\tDISTS_CORI1: {distsc_ori_1.avg:.6f}±{distsc_ori_1.std:.6f} |"
         f"\tPSNR_CORI2: {psnrc_ori_2.avg:.6f}±{psnrc_ori_2.std:.6f} |"
         f"\tSSIM_CORI2: {ssimc_ori_2.avg:.6f}±{ssimc_ori_2.std:.6f} |"
+        f"\tMAE_CORI2: {maec_ori_2.avg:.6f}±{maec_ori_2.std:.6f} |"
         f"\tLPIPS_CORI2: {lpipsc_ori_2.avg:.6f}±{lpipsc_ori_2.std:.6f} |"
+        f"\tDISTS_CORI2: {distsc_ori_2.avg:.6f}±{distsc_ori_2.std:.6f} |"
         f"\tTIME: {infer_time.avg:.2f}±{infer_time.std:.2f} ms/img |"
     )
     tb_logger.add_scalar('{}'.format('[val]: loss'), loss.avg, epoch + 1)

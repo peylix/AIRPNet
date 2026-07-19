@@ -224,3 +224,14 @@ def bgr2ycbcr(img, y_only=False):
         ) + [16, 128, 128]
     out_img = _convert_output_type_range(out_img, img_type)
     return out_img
+
+
+def calculate_mae(img1, img2, test_y_channel=True):
+    """Mean absolute error on [0, 1] scale (reference: metrics/measure.py)."""
+    assert img1.shape == img2.shape
+    img1 = img1.astype(np.float64)
+    img2 = img2.astype(np.float64)
+    if test_y_channel:
+        img1 = to_y_channel(img1)
+        img2 = to_y_channel(img2)
+    return float(np.mean(np.abs(img1 - img2)) / 255.0)

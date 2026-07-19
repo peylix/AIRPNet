@@ -17,6 +17,7 @@ import numpy as np
 import PIL.Image as Image
 from torchvision.transforms import ToPILImage
 from pytorch_msssim import ms_ssim
+import metrics as my_metrics
 from typing import Tuple, Union
 from torch.utils.tensorboard import SummaryWriter
 from util import DWT,IWT,setup_logger
@@ -24,10 +25,6 @@ from LIH import LIH as hide_model
 from LSR import Model as restore_model
 from tqdm import tqdm
 import lpips
-
-
-
-
 
 
 def downsample(hr,scale):
@@ -72,6 +69,26 @@ def compute_metrics(
     p = 20 * np.log10(max_val) - 10 * np.log10(mse)
     m = ms_ssim(a, b, data_range=max_val).item()
     return p, m
+
+
+def compute_mae(a: Image.Image, b: Image.Image) -> float:
+    """Y-channel MAE on [0, 1] scale (reference: metrics/measure.py)."""
+    a_bgr = np.asarray(a)[:, :, ::-1]
+    b_bgr = np.asarray(b)[:, :, ::-1]
+    return my_metrics.calculate_mae(a_bgr, b_bgr, test_y_channel=True)
+
+
+_dists_fn = None
+
+
+def get_dists_fn(device):
+    """DISTS via piq, created lazily so training without piq still works."""
+    global _dists_fn
+    if _dists_fn is None:
+        from piq import DISTS
+        _dists_fn = DISTS().to(device).eval()
+    return _dists_fn
+
 
 class AverageMeter:
     """Compute running average."""
@@ -118,7 +135,6 @@ def configure_optimizers(net, args):
         lr=args.learning_rate,
     )
     return optimizer
-
 
 
 def train_one_epoch(
@@ -200,6 +216,7 @@ def test_epoch(args,epoch, test_dataloader, hide_model, denoise_model,logger_val
     hide_model.eval()
     denoise_model.eval() 
     device = next(hide_model.parameters()).device
+    dists_fn = get_dists_fn(device)
     psnrc = AverageMeter()
     ssimc = AverageMeter()
     psnrs = AverageMeter()
@@ -209,6 +226,12 @@ def test_epoch(args,epoch, test_dataloader, hide_model, denoise_model,logger_val
     lpipsc =  AverageMeter()
     lpipss =  AverageMeter()
     lpipscori =  AverageMeter()
+    maec = AverageMeter()
+    maes = AverageMeter()
+    maecori = AverageMeter()
+    distsc = AverageMeter()
+    distss = AverageMeter()
+    distscori = AverageMeter()
     loss = AverageMeter()
     i=0
     
@@ -272,13 +295,21 @@ def test_epoch(args,epoch, test_dataloader, hide_model, denoise_model,logger_val
             loss.update(out_criterion["loss"])
             
             #comute lpips tensor
-            lc = lpips_fn.forward(cover_img,steg_clean)
-            ls = lpips_fn.forward(secret_img,rec_img)
-            lori = lpips_fn.forward(cover_img,steg_ori)
+            # Model outputs are clamped to [0, 1] as when saved to PNG;
+            # normalize=True maps [0, 1] to the [-1, 1] LPIPS input range.
+            steg_clean_c = steg_clean.clamp(0, 1)
+            steg_ori_c = steg_ori.clamp(0, 1)
+            rec_img_c = rec_img.clamp(0, 1)
+            lc = lpips_fn.forward(cover_img, steg_clean_c, normalize=True)
+            ls = lpips_fn.forward(secret_img, rec_img_c, normalize=True)
+            lori = lpips_fn.forward(cover_img, steg_ori_c, normalize=True)
 
             lpipsc.update(lc.mean().item())
             lpipss.update(ls.mean().item())
             lpipscori.update(lori.mean().item())
+            distsc.update(dists_fn(steg_clean_c, cover_img).item())
+            distss.update(dists_fn(rec_img_c, secret_img).item())
+            distscori.update(dists_fn(steg_ori_c, cover_img).item())
 
             #compute psnr and save image
             save_dir = os.path.join('experiments', args.experiment,'images')
@@ -294,12 +325,15 @@ def test_epoch(args,epoch, test_dataloader, hide_model, denoise_model,logger_val
             p1, m1 = compute_metrics(secret_img_rec, secret_img)
             psnrs.update(p1)
             ssims.update(m1)
+            maes.update(compute_mae(secret_img_rec, secret_img))
             p2, m2 = compute_metrics(steg_img, cover_img)
             psnrc.update(p2)
             ssimc.update(m2)
+            maec.update(compute_mae(steg_img, cover_img))
             p3, m3 = compute_metrics(steg_img_ori, cover_img)
             psnrcori.update(p3)
             ssimcori.update(m3)
+            maecori.update(compute_mae(steg_img_ori, cover_img))
 
            
 
@@ -339,20 +373,25 @@ def test_epoch(args,epoch, test_dataloader, hide_model, denoise_model,logger_val
         f"Test epoch {epoch} - Degrate Type {degrate_type}: Average losses:"
         f"\tPSNRC: {psnrc.avg:.6f}±{psnrc.std:.6f} |"
         f"\tSSIMC: {ssimc.avg:.6f}±{ssimc.std:.6f} |"
+        f"\tMAEC: {maec.avg:.6f}±{maec.std:.6f} |"
         f"\tLPIPSC: {lpipsc.avg:.6f}±{lpipsc.std:.6f} |"
+        f"\tDISTSC: {distsc.avg:.6f}±{distsc.std:.6f} |"
         f"\tPSNRS: {psnrs.avg:.6f}±{psnrs.std:.6f} |"
         f"\tSSIMS: {ssims.avg:.6f}±{ssims.std:.6f} |"
+        f"\tMAES: {maes.avg:.6f}±{maes.std:.6f} |"
         f"\tLPIPSS: {lpipss.avg:.6f}±{lpipss.std:.6f} |"
+        f"\tDISTSS: {distss.avg:.6f}±{distss.std:.6f} |"
         f"\tPSNRCORI: {psnrcori.avg:.6f}±{psnrcori.std:.6f} |"
         f"\tSSIMCORI: {ssimcori.avg:.6f}±{ssimcori.std:.6f} |"
+        f"\tMAECORI: {maecori.avg:.6f}±{maecori.std:.6f} |"
         f"\tLPIPSORI: {lpipscori.avg:.6f}±{lpipscori.std:.6f} |"
+        f"\tDISTSORI: {distscori.avg:.6f}±{distscori.std:.6f} |"
         f"\tTIME: {infer_time.avg:.2f}±{infer_time.std:.2f} ms/img |\n"
     )
 
     return loss.avg
 
               
-
 
 
 def save_checkpoint(state, is_best, filename="checkpoint.pth.tar"):
